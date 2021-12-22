@@ -59,6 +59,7 @@ impl Board {
         return false;
     }
 
+    #[allow(dead_code)]
     fn sum_unmarked(&self, marked: &HashSet<&BingoNumber>) -> BingoNumber {
         let mut sum = 0;
         for row in 0..5 {
@@ -71,31 +72,17 @@ impl Board {
         }
         sum
     }
+
+    // Is this more elegant? Not sure really.
+    fn sum_unmarked2(&self, marked: &HashSet<&BingoNumber>) -> BingoNumber {
+        let coords = (0..5).flat_map(|row| (0..5).map(move |col| (row, col)));
+        coords.fold(0, |sum, (x, y)| {
+            let n = self.cells[x][y];
+            sum + if marked.contains(&n) { 0 } else { n }
+        })
+    }
 }
 
-// Not particularly elegant, but handles invalid input
-#[allow(dead_code)]
-fn parse_row(row: &str) -> std::io::Result<BoardRow> {
-    let mut numbers = [0; 5];
-    let pairs: Vec<(&mut BingoNumber, &str)> =
-        numbers.iter_mut().zip(row.split_whitespace()).collect();
-
-    if pairs.len() != 5 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Invalid row length",
-        ));
-    }
-    for (result, nstr) in pairs {
-        match nstr.parse::<BingoNumber>() {
-            Ok(n) => *result = n,
-            Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid number")),
-        }
-    }
-    Ok(BoardRow { cells: numbers })
-}
-
-// Is this better?
 fn parse_row2(row: &str) -> std::io::Result<BoardRow> {
     let row_nums = row
         .split_whitespace()
@@ -141,6 +128,31 @@ where
     }
 }
 
+// Takes an iterator of 6 strings, consumes 5 and builds a Board, or returns an error
+fn read_board<T: Iterator<Item = std::io::Result<String>>>(row_iter: T) -> std::io::Result<Board> {
+    // Make an empty board to write into
+    // TODO: how can I spell the type of this to separate it out into a function?
+    // let mut board = Board { cells: [[0; 5]; 5] };
+    let board_rows: io::Result<Vec<_>> = row_iter
+        .take(5)
+        .map(|line| match line {
+            Ok(line) => line.parse::<BoardRow>(),
+            Err(e) => Err(e),
+        })
+        .collect();
+
+    let board: io::Result<Board> = match board_rows {
+        Ok(rows) => {
+            let cells = rows.iter().map(|row| row.cells).to_array5();
+            cells
+                .map(|cells| Board { cells })
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Not enough rows in board"))
+        }
+        Err(e) => return Err(e),
+    };
+    return board;
+}
+
 fn read_input() -> std::io::Result<(Vec<BingoNumber>, Vec<Board>)> {
     let stdin = io::stdin();
     let mut stdin_iter = stdin.lock().lines().into_iter();
@@ -178,54 +190,51 @@ fn read_input() -> std::io::Result<(Vec<BingoNumber>, Vec<Board>)> {
     let boards = stdin_iter
         .chunks(6)
         .into_iter()
-        .map(|row_iter| {
-            // Make an empty board to write into
-            // TODO: how can I spell the type of this to separate it out into a function?
-            // let mut board = Board { cells: [[0; 5]; 5] };
-            let board_rows: io::Result<Vec<_>> = row_iter
-                .take(5)
-                .map(|line| match line {
-                    Ok(line) => line.parse::<BoardRow>(),
-                    Err(e) => Err(e),
-                })
-                .collect();
-
-            let board: io::Result<Board> = match board_rows {
-                Ok(rows) => {
-                    let cells = rows.iter().map(|row| row.cells).to_array5();
-                    cells.map(|cells| Board { cells }).map_err(|_| {
-                        io::Error::new(io::ErrorKind::InvalidData, "Not enough rows in board")
-                    })
-                }
-                Err(e) => return Err(e),
-            };
-            return board;
-        })
+        .map(read_board)
         .collect::<io::Result<Vec<Board>>>();
 
     return Ok((called_numbers, boards?));
 }
 
 fn main() {
-    let (called_numbers, boards) = read_input().unwrap();
+    let (called_numbers, boards) = match read_input() {
+        Ok(v) => v,
+        Err(e) => {
+            println!("Input Error: {}", e);
+            return;
+        }
+    };
+
+    let mut remaining_boards = boards;
 
     for (turn_number, called_number) in called_numbers.iter().enumerate() {
         // Set of numbers that have been called
         let called_set = HashSet::from_iter(called_numbers[0..(turn_number + 1)].iter());
-        // Look for a winner
-        if let Some(winner) = boards.iter().find(|board| board.is_winner(&called_set)) {
-            let unmarked = winner.sum_unmarked(&called_set);
-            println!(
-                "Called {}! We have a winner! \nIt's {:?} \n unmarked sum: {} product: {}",
-                called_number,
-                winner,
-                unmarked,
-                unmarked * called_number
-            );
-            return;
+
+        // Ok, we're down to just one board left, this is the one for the squid
+        if remaining_boards.len() == 1 {
+            let eventual_winner = remaining_boards.first().unwrap();
+            if eventual_winner.is_winner(&called_set) {
+                let winner = eventual_winner;
+                let unmarked = winner.sum_unmarked2(&called_set);
+                println!(
+                    "Called {}! We have our last winner! \nIt's {:?} \n unmarked sum: {} product: {}",
+                    called_number,
+                    winner,
+                    unmarked,
+                    unmarked * called_number
+                );
+                return;
+            }
         } else {
-            println!("Called {}! No winner yet.", called_number);
+            println!(
+                "Called {}! Boards that haven't won yet: {}.",
+                called_number,
+                remaining_boards.len()
+            );
         }
+        // Remove boards that already won
+        remaining_boards.retain(|board| !board.is_winner(&called_set));
     }
-    println!("No winners!");
+    println!("No winners! boards");
 }
