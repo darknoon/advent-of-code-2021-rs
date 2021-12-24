@@ -1,12 +1,12 @@
 use std::io;
 
 struct Fish(u32);
+const BABY_FISH: Fish = Fish(8);
+const ADULT_FISH: Fish = Fish(6);
 
 impl Fish {
     // Update state and optionally create a new fish
-    fn next(&self, x: u32) -> (Self, Option<Self>) {
-        let BABY_FISH = Fish(8);
-        let ADULT_FISH = Fish(6);
+    fn next(&self) -> (Self, Option<Self>) {
         match self {
             Fish(0) => (ADULT_FISH, Some(BABY_FISH)),
             Fish(i) => (Fish(i - 1), None),
@@ -33,7 +33,7 @@ fn main() -> io::Result<()> {
     for day in 0..80 {
         // Only need to run update for old fishes, not new
         for i in 0..fish.len() {
-            let (fish_updated, new_fish) = fish[i].next(day);
+            let (fish_updated, new_fish) = fish[i].next();
             if let Some(new_fish) = new_fish {
                 fish.push(new_fish);
             }
