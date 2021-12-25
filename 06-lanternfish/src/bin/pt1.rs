@@ -30,7 +30,7 @@ fn read_input() -> io::Result<Vec<Fish>> {
 
 fn main() -> io::Result<()> {
     let mut fish = read_input()?;
-    for day in 0..80 {
+    for day in 0..256 {
         // Only need to run update for old fishes, not new
         for i in 0..fish.len() {
             let (fish_updated, new_fish) = fish[i].next();
