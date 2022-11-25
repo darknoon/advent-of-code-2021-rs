@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "dive"
+name = "dive-pt2"
 version = "0.1.0"
